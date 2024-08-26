@@ -1,0 +1,43 @@
+#include "bayer.h"
+#include "stm32f4xx.h"
+#include "usart.h"
+
+void writeRgbUSART(pixel rgbmap[width][height]);
+void getRow(uint8_t arr[width]);
+
+int main(int argc, char *argv[]) {
+
+  initUSART2(USART2_BAUDRATE_115200);
+  // printUSART2("////////////////////////////\n");
+  // printUSART2("Initializing...\n");
+  // printUSART2("////////////////////////////\n");
+  char c;
+
+  pixel rgbmap[width][height];
+  convert(rgbmap);
+  writeRgbUSART(rgbmap);
+
+  // int i = 3;
+  //
+  // uint8_t arr[3][width];
+  //
+  // getRow(arr[0]);
+  // getRow(arr[1]);
+  // getRow(arr[2]);
+  //
+  // while(i++ < height) {
+  // }
+
+  return 0;
+}
+
+void writeRgbUSART(pixel rgbmap[width][height]) {
+  int i, j;
+  for (i = 0; i < width; ++i) {
+    for (j = 0; j < height; ++j) {
+      pixel px = rgbmap[i][j];
+      printUSART2("%d:%d:%d,", px.rgb.red, px.rgb.green, px.rgb.blue);
+    }
+    printUSART2("\n");
+  }
+}

@@ -1,0 +1,100 @@
+package main
+
+import (
+	"bufio"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+)
+
+const width, height = 180, 180
+
+func main() {
+
+	img := loadValues()
+
+	f, err := os.Create("image.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func loadValues() *image.RGBA {
+	file, err := os.Open("/home/emir/faks/diplomski/bayer2rgb/mcu/misc/imagegen/rgbmap.csv")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	rd := bufio.NewReader(file)
+	i := 0
+
+	for {
+		line, err := rd.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Error reading line: %v", err)
+			continue
+		}
+
+		rgbs := strings.Split(strings.TrimSpace(line), ",")
+		for j := 0; j < width; j++ {
+			rgb := strings.Split(rgbs[j], ":")
+
+			// Ensure each RGB value is parsed correctly or set to 0 if it fails
+			red, err := safeAtoi(rgb, 0)
+			if err != nil {
+				log.Printf("Error parsing red value at [%d,%d]: %v", i, j, err)
+			}
+
+			green, err := safeAtoi(rgb, 1)
+			if err != nil {
+				log.Printf("Error parsing green value at [%d,%d]: %v", i, j, err)
+			}
+
+			blue, err := safeAtoi(rgb, 2)
+			if err != nil {
+				log.Printf("Error parsing blue value at [%d,%d]: %v", i, j, err)
+			}
+
+			img.Set(j, i, color.NRGBA{
+				R: uint8(red),
+				G: uint8(green),
+				B: uint8(blue),
+				A: 255,
+			})
+		}
+		i++
+	}
+
+	return img
+}
+
+// safeAtoi safely converts a string to an int, returning 0 if the conversion fails
+func safeAtoi(rgb []string, index int) (int, error) {
+	if len(rgb) > index {
+		val, err := strconv.Atoi(rgb[index])
+		if err != nil {
+			return 0, err
+		}
+		return val, nil
+	}
+	return 0, nil
+}

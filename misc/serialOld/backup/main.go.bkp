@@ -1,0 +1,113 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/tarm/serial"
+)
+
+const outputFileName = "rgbmap.csv"
+const baudRate = 115200
+
+func main() {
+	// Check if input is provided through redirection
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		fmt.Printf("Error reading stdin: %v\n", err)
+		return
+	}
+
+	// Read input lines from stdin
+	var inputLines []string
+	if info.Mode()&os.ModeCharDevice == 0 {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			inputLines = append(inputLines, line)
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Printf("Error reading input: %v\n", err)
+			return
+		}
+	} else {
+		fmt.Println("Please provide input through redirection: ./main < file.txt")
+		return
+	}
+
+	// Open the serial port
+	config := &serial.Config{
+		Name: "/dev/ttyUSB0",
+		Baud: baudRate,
+	}
+	port, err := serial.OpenPort(config)
+	if err != nil {
+		fmt.Printf("Failed to open port: %v\n", err)
+		return
+	}
+	defer port.Close()
+
+	// Open the output file
+	outputFile, err := os.Create(outputFileName)
+	if err != nil {
+		fmt.Printf("Failed to create output file: %v\n", err)
+		return
+	}
+	defer outputFile.Close()
+
+	reader := bufio.NewReader(port)
+	writer := bufio.NewWriter(outputFile)
+
+	// Send the first three lines
+	for i := 0; i < 3 && i < len(inputLines); i++ {
+		sendLine(port, inputLines[i])
+	}
+
+	// Alternate between sending and receiving lines
+	for i := 3; i < len(inputLines); i++ {
+		// Receive a line and write it to the output file
+		receivedLine, err := receiveLine(reader)
+		if err != nil {
+			fmt.Printf("Error receiving line: %v\n", err)
+			break
+		}
+		fmt.Fprintln(writer, receivedLine)
+		writer.Flush()
+
+		// Send the next line
+		sendLine(port, inputLines[i])
+	}
+
+	// Receive the final line
+	receivedLine, err := receiveLine(reader)
+	if err == nil {
+		fmt.Fprintln(writer, receivedLine)
+		writer.Flush()
+	} else {
+		fmt.Printf("Error receiving final line: %v\n", err)
+	}
+
+	fmt.Println("Finished communication and wrote to rgbmap.csv")
+}
+
+func sendLine(port *serial.Port, line string) {
+	lineWithNewline := line + "\n"
+	_, err := port.Write([]byte(lineWithNewline))
+	if err != nil {
+		fmt.Printf("Error sending line: %v\n", err)
+	} else {
+		fmt.Printf("Sent: %s", lineWithNewline)
+	}
+}
+
+func receiveLine(reader *bufio.Reader) (string, error) {
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	line = strings.TrimSpace(line)
+	fmt.Printf("Received: %s\n", line)
+	return line, nil
+}
