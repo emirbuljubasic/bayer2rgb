@@ -8,106 +8,131 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tarm/serial"
+	"go.bug.st/serial"
 )
 
-// Constants for easy modification
 const (
-	serialPath = "/dev/ttyUSB0"
-	baudRate   = 115200
-	outputFile = "rgbmap.csv"
+	baudRate     = 115200         // Baud rate for UART communication
+	serialPort   = "/dev/ttyUSB0" // Serial port to use for UART communication
+	recvDataSize = 192            // Number of bytes expected from STM32F407G
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("Usage: %s <input.txt>\n", os.Args[0])
+	if len(os.Args) != 2 {
+		log.Fatalf("Usage: %s <input_file>\n", os.Args[0])
 	}
 
-	inputFile := os.Args[1]
+	inputFileName := os.Args[1]
 
 	// Open the serial port
-	config := &serial.Config{Name: serialPath, Baud: baudRate}
-	port, err := serial.OpenPort(config)
+	port, err := serial.Open(serialPort, &serial.Mode{BaudRate: baudRate})
 	if err != nil {
-		log.Fatalf("Failed to open serial port: %v", err)
+		log.Fatalf("Error opening serial port: %v\n", err)
 	}
 	defer port.Close()
 
+	log.Printf("Serial port %s opened successfully\n", serialPort)
+
 	// Open the input file
-	file, err := os.Open(inputFile)
+	file, err := os.Open(inputFileName)
 	if err != nil {
-		log.Fatalf("Failed to open input file: %v", err)
+		log.Fatalf("Error opening input file: %v\n", err)
 	}
 	defer file.Close()
 
-	// Open the output file for received data
-	output, err := os.Create(outputFile)
+	// Prepare the output file
+	outFile, err := os.Create("rgbmap.csv")
 	if err != nil {
-		log.Fatalf("Failed to create output file: %v", err)
+		log.Fatalf("Error creating output file: %v\n", err)
 	}
-	defer output.Close()
+	defer outFile.Close()
 
+	// Read the file and send the first three rows
 	scanner := bufio.NewScanner(file)
-	lineCount := 0
-
-	// Send the first three lines immediately, character by character
-	for lineCount < 3 && scanner.Scan() {
+	rowCount := 0
+	for scanner.Scan() {
 		line := scanner.Text()
-		sendNumbers(line, port)
-		lineCount++
+		numbers := strings.Split(line, ",")
+		bytesToSend := make([]byte, len(numbers)-1) // -1 to ignore the trailing comma
+		for i, numStr := range numbers[:len(numbers)-1] {
+			num, _ := strconv.Atoi(numStr)
+			bytesToSend[i] = byte(num)
+		}
+
+		// Send the data
+		_, err := port.Write(bytesToSend)
+		if err != nil {
+			log.Fatalf("Error writing to serial port: %v\n", err)
+		}
+		log.Printf("Sent row %d: %s\n", rowCount+1, line)
+
+		// If we've sent 3 rows, start the send/receive loop
+		if rowCount >= 2 {
+			break
+		}
+		rowCount++
 	}
 
-	// Alternate between sending and receiving
+	// Receive data and send the remaining rows
 	for scanner.Scan() {
-		// Wait for the response from the serial port
-		var data []string
-		for i := 0; i < 192; i++ {
-			val, err := bufio.NewReader(port).ReadByte()
+		// time.Sleep(500 * time.Millisecond)
+		// Receive 192 bytes from the STM32
+		buf := make([]byte, 1)
+		total := 0
+		var val byte
+		for val != 0xFF {
+			n, err := port.Read(buf)
 			if err != nil {
-				log.Println("Failed to read from serial port: %v", err)
+				log.Fatalf("Error reading from serial port: %v\n", err)
 			}
-			fmt.Printf("Read byte [%d] -> %d\n", i, int(val))
-			data = append(data, strconv.Itoa(int(val)))
-			if i%3 != 0 {
-				data = append(data, ":")
-			} else {
-				data = append(data, ",")
-			}
+			println("read n bytes:", n)
+			val = buf[0]
+			total += n
 		}
 
-		response := strings.Join(data, "")
-		// Save the received line to the output file
-		if _, err := output.WriteString(response); err != nil {
-			log.Fatalf("Failed to write to output file: %v", err)
+		log.Printf("Received %d bytes\n", total)
+		// Format the received data
+		receivedStr := formatReceivedData(buf)
+
+		// Write the formatted data to rgbmap.csv
+		_, err = outFile.WriteString(receivedStr + "\n")
+		if err != nil {
+			log.Fatalf("Error writing to output file: %v\n", err)
 		}
 
-		// Send the next line from the input file, number by number
+		// Send the next row
 		line := scanner.Text()
-		sendNumbers(line, port)
+		numbers := strings.Split(line, ",")
+		bytesToSend := make([]byte, len(numbers)-1) // -1 to ignore the trailing comma
+		for i, numStr := range numbers[:len(numbers)-1] {
+			num, _ := strconv.Atoi(numStr)
+			bytesToSend[i] = byte(num)
+		}
+
+		_, err = port.Write(bytesToSend)
+		if err != nil {
+			log.Fatalf("Error writing to serial port: %v\n", err)
+		}
+		log.Printf("Sent row %d: %s\n", rowCount+1, line)
+
+		rowCount++
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatalf("Error reading input file: %v", err)
+		log.Fatalf("Error reading input file: %v\n", err)
 	}
 
-	fmt.Println("File transfer complete.")
+	log.Println("Finished communication")
 }
 
-// sendNumbers parses a line of text, extracts numbers separated by commas,
-// and sends them one by one to the serial port
-func sendNumbers(line string, port *serial.Port) {
-	// Split the line by commas
-	numbers := strings.Split(line, ",")
-	for _, numberStr := range numbers {
-		// Trim any whitespace and convert to an integer
-		numberStr = strings.TrimSpace(numberStr)
-		if number, err := strconv.Atoi(numberStr); err == nil {
-			// Convert the integer to a byte and send it
-			_, err := port.Write([]byte{byte(number)})
-			if err != nil {
-				log.Fatalf("Failed to write to serial port: %v", err)
-			}
-			// time.Sleep(10 * time.Millisecond) // Small delay between characters
-		}
+// formatReceivedData formats the received byte slice into the required format
+func formatReceivedData(data []byte) string {
+	var result strings.Builder
+	for i := 0; i < len(data); i += 3 {
+		// if i > 0 {
+		// 	result.WriteString(",")
+		// }
+		result.WriteString(fmt.Sprintf("%d:%d:%d,", data[i], data[i+1], data[i+2]))
 	}
+	return result.String()
 }

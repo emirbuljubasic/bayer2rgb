@@ -7,34 +7,34 @@
 
 typedef uint8_t pix;
 
-void writeRgbUSART(pixel rgbmap[width][height]);
-void grabRow(pix *row);
-
 void calculateRow(pix *row1, pix *row2, pix *row3, pixel *row4, uint8_t i);
-void sendRow(pixel *row);
+void convertPixelToRow(uint8_t *data, pixel *row);
 
 pix row1[width];
 pix row2[width];
 pix row3[width];
 // pixel row4[width * 2];
 pixel row4[width];
+uint8_t row5[width * 3 + 1];
+// uint8_t row5[width * 3 + 1];
 
 int main(int argc, char *argv[]) {
 
   initUSART2(USART2_BAUDRATE_115200);
   init_DMA1();
-  initSTOPWATCH();
+  // initSTOPWATCH();
 
   getrowUSART2_DMA(row1);
   getrowUSART2_DMA(row2);
   getrowUSART2_DMA(row3);
 
   int i = 0;
-  int time = 0;
+  // int time = 0;
   for (; i < height - 3; i++) {
     calculateRow(row1, row2, row3, row4, i);
-    // sendRow(row4);
-    sendrowUSART2_DMA(row4);
+
+    convertPixelToRow(row5, row4);
+    sendrowUSART2_DMA(row5);
 
     memcpy(row1, row2, width);
     memcpy(row2, row3, width);
@@ -52,24 +52,13 @@ void calculateRow(pix *row1, pix *row2, pix *row3, pixel *row4, uint8_t i) {
   }
 }
 
-void grabRow(pix *row) {
-  int i;
-  uint8_t val, num;
-  for (i = 0; i < width; i++) {
-    num = 0;
-    while ((val = getcharUSART2()) != ',') {
-      num *= 10;
-      num += val - '0';
-    }
-
-    row[i] = num;
+void convertPixelToRow(uint8_t *data, pixel *row) {
+  int i = 0, n = 0;
+  for (; i < width; i++) {
+    n = i * 3;
+    data[n] = (row[i].rgb.red * 31) / 255;
+    data[n + 1] = (row[i].rgb.green * 63) / 255;
+    data[n + 2] = (row[i].rgb.blue * 31) / 255;
   }
-}
-
-void sendRow(pixel *row) {
-  int i;
-  for (i = 0; i < width; i++) {
-    printUSART2("%d:%d:%d,", row[i].rgb.red, row[i].rgb.green, row[i].rgb.blue);
-  }
-  printUSART2("\n");
+  data[width * 3] = 0xFF;
 }

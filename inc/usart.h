@@ -12,27 +12,20 @@
 #define USART2_BAUDRATE_115200 0x0000016C
 #define USART2_BAUDRATE_9600 0x00001117
 
-uint8_t data[192];
+#define TX_BUFF_SIZE width * 3 + 1
+#define RX_BUFF_SIZE width
+
+// uint8_t data[width * 3 + 1];
 
 void initUSART2(uint32_t baudrate);
-void putcharUSART2(uint8_t data);
-void printUSART2(char *str, ...);
-void sprintUSART2(uint8_t *str);
-uint8_t getcharUSART2(void);
-void getrowUSART2(uint8_t *row);
 
-// void initUSART2_DMA(uint8_t *row, uint16_t size);
-// void getrowUSART2_DMA(uint8_t *row, uint16_t size);
-
-void initUSART2_DMA(uint8_t *row);
 void USART2_IRQHandler(void);
-void getrowUSART2_DMA(uint8_t *row);
 
 void init_DMA1(void);
-
-void sendrowUSART2_DMA(pixel *row);
-
 void init_DMA1_RX(void);
 void init_DMA1_TX(void);
+
+void getrowUSART2_DMA(uint8_t *row);
+void sendrowUSART2_DMA(uint8_t *row);
 
 #endif

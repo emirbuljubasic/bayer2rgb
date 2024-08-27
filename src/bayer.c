@@ -6,20 +6,6 @@ extern uint8_t row2[width];
 extern uint8_t row3[width];
 extern uint8_t row4[width];
 
-// int bitmap[height][width] = {
-//     {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0},
-//     {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0},
-// };
-
-// void convert(pixel rgbmap[width][height]) {
-//   int i, j;
-//   for (i = 0; i < width; ++i) {
-//     for (j = 0; j < height; ++j) {
-//       rgbmap[i][j] = calculatePixel(i, j);
-//     }
-//   }
-// }
-
 pixel calculatePixel(int x, int y) {
   // red
   if (x % 2 != 0 && y % 2 != 0) {
